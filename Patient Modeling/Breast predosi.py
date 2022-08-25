@@ -1,5 +1,7 @@
 from connect import *
 import sys
+import tkinter.ttk as ttk
+from tkinter import *
 
 #############################################
 ##### SCRIPT SENO - ETAPE 2 : PHYSICIEN #####
@@ -14,6 +16,7 @@ import sys
 # Version 1.5 : Création du volume RING PTV TOT - PTVp_tumourbed_TOT à la place des 2 volumes RING PTV TOT - PTVp_tumourbed_R et RING PTV TOT - PTVp_tumourbed_L
 # Version 1.6 : Modification du type de HumHead_PRV en enlevant "Undefined" et en mettant "Organ"
 # Version 1.7 : Ajout de la vérification si la ROI External - PTV TOT a une expression avant de faire l'update de la géométrie (sinon bug)
+# Version 1.8 : Ajout d'un pop up prévenant que le CT est en BVR (pour ne pas  mettre patient en tomo) et d'une autre pop up indiquant quand le PTV TOT sort du FOV du CBCT
 ################################################################
 
 
@@ -88,6 +91,26 @@ def create_z_ROI(Case, exam, roi, color, marge=""):
 Patient = get_current("Patient")
 Case = get_current("Case")
 exam = get_current("Examination").Name
+examination = get_current("Examination")
+
+
+# Si le scanner est BVR, pop up avertissant l'utilisateur que le patient ne peut être traité en tomo
+exam_data = examination.GetAcquisitionDataFromDicom()
+study_description = exam_data['SeriesModule']['SeriesDescription']
+study_description = study_description.lower()
+study_protocol= examination.GetProtocolName()
+study_protocol = study_protocol.lower()
+# Pour le GOSIM, la mention BVR est dans le study description et pour le sensation open, le BVR est indiqué par le mot
+# clé SPIRO dans le study protocol
+if "bvr" in study_description or "spiro" in study_protocol:
+    root_pop_up = Tk()
+    root_pop_up.title("Paramètre important")
+    root_pop_up.geometry("545x75")
+    Label(root_pop_up, text="Attention, le CT sélectionné est en BVR. Vérifier que le patient n'est pas traité en tomothérapie.").grid(row=1, column=1, padx=10, pady=10)
+    Button(root_pop_up, text='OK', command=root_pop_up.destroy, height=1, width=10).grid(row=2, column=1)
+    root_pop_up.bind('<Return>', lambda event: root_pop_up.destroy())
+    root_pop_up.bind('<Escape>', lambda event: sys.exit())
+    mainloop()
 
 """
 if not Case.PatientModel.StructureSets[exam].RoiGeometries["PTV TOT"].HasContours():
@@ -144,7 +167,7 @@ if "ChambreChimio+3mm (EVIT)" not in roi_list:
     Case.PatientModel.RegionsOfInterest["ChambreChimio+3mm (EVIT)"].UpdateDerivedGeometry(
         Examination=Case.Examinations[exam], Algorithm="Auto")
 
-if "CTVp_tumourbed" or "GTVp_tumour" or "CTVp_tumour" in roi_list:
+if "CTVp_tumourbed" in roi_list:
     if not Case.PatientModel.StructureSets[exam].RoiGeometries["CTVp_tumourbed"].HasContours():
         Case.PatientModel.RegionsOfInterest["CTVp_tumourbed"].DeleteRoi()
         Case.PatientModel.RegionsOfInterest["PTVp_tumourbed"].DeleteRoi()
@@ -345,39 +368,30 @@ elif not Case.PatientModel.RegionsOfInterest["External - PTV TOT"].DerivedRoiExp
 Case.PatientModel.RegionsOfInterest["External - PTV TOT"].UpdateDerivedGeometry(Examination=Case.Examinations[exam],
                                                                                 Algorithm="Auto")
 
-if "CTVp_tumourbed" or "GTVp_tumour" or "CTVp_tumour" in roi_list:
-    if "PTVp_tumourbed" in roi_list:
-        boost_name = "PTVp_tumourbed"
-        boost_abbrev_name = "tbed"
-    else:
-        boost_name = "PTVp_tumour"
-        boost_abbrev_name = "tumour"
-
-    boost_ring_out_name = "RING " + boost_name + " out"
-    if boost_ring_out_name not in roi_list:
-        Case.PatientModel.CreateRoi(Name=boost_ring_out_name, Color="0,0,0", Type="Undefined", TissueName=None,
+if "CTVp_tumourbed" in roi_list:
+    if "RING PTVp_tumourbed out" not in roi_list:
+        Case.PatientModel.CreateRoi(Name="RING PTVp_tumourbed out", Color="0,0,0", Type="Undefined", TissueName=None,
                                     RbeCellTypeName=None, RoiMaterial=None)
-        ExpressionA = {'Operation': "Union", 'SourceRoiNames': [boost_name],
+        ExpressionA = {'Operation': "Union", 'SourceRoiNames': ["PTVp_tumourbed"],
                        'MarginSettings': {'Type': "Expand", 'Superior': 1.5, 'Inferior': 1.5, 'Anterior': 1.5,
                                           'Posterior': 1.5, 'Right': 1.5, 'Left': 1.5}}
-        ExpressionB = {'Operation': "Union", 'SourceRoiNames': [boost_name],
+        ExpressionB = {'Operation': "Union", 'SourceRoiNames': ["PTVp_tumourbed"],
                        'MarginSettings': {'Type': "Expand", 'Superior': 0.2, 'Inferior': 0.2, 'Anterior': 0.2,
                                           'Posterior': 0.2, 'Right': 0.2, 'Left': 0.2}}
         ResultOperation = "Subtraction"
         ResultMarginSettings = {'Type': "Contract", 'Superior': 0.0, 'Inferior': 0.0, 'Anterior': 0.0, 'Posterior': 0.0,
                                 'Right': 0.0, 'Left': 0.0}
-        Case.PatientModel.RegionsOfInterest[boost_ring_out_name].SetAlgebraExpression(ExpressionA=ExpressionA,
+        Case.PatientModel.RegionsOfInterest["RING PTVp_tumourbed out"].SetAlgebraExpression(ExpressionA=ExpressionA,
                                                                                             ExpressionB=ExpressionB,
                                                                                             ResultOperation=ResultOperation,
                                                                                             ResultMarginSettings=ResultMarginSettings)
-    Case.PatientModel.RegionsOfInterest[boost_ring_out_name].UpdateDerivedGeometry(Examination=Case.Examinations[exam],
-                                                                                   Algorithm="Auto")
+    Case.PatientModel.RegionsOfInterest["RING PTVp_tumourbed out"].UpdateDerivedGeometry(
+        Examination=Case.Examinations[exam], Algorithm="Auto")
 
-    boost_ring_name = "RING " + boost_name
-    if boost_ring_name not in roi_list:
-        Case.PatientModel.CreateRoi(Name=boost_ring_name, Color="255,255,0", Type="Undefined", TissueName=None,
+    if "RING PTVp_tumourbed" not in roi_list:
+        Case.PatientModel.CreateRoi(Name="RING PTVp_tumourbed", Color="255,255,0", Type="Undefined", TissueName=None,
                                     RbeCellTypeName=None, RoiMaterial=None)
-        ExpressionA = {'Operation': "Union", 'SourceRoiNames': [boost_ring_out_name],
+        ExpressionA = {'Operation': "Union", 'SourceRoiNames': ["RING PTVp_tumourbed out"],
                        'MarginSettings': {'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0,
                                           'Right': 0, 'Left': 0}}
         ExpressionB = {'Operation': "Union", 'SourceRoiNames': ["External"],
@@ -386,57 +400,54 @@ if "CTVp_tumourbed" or "GTVp_tumour" or "CTVp_tumour" in roi_list:
         ResultOperation = "Intersection"
         ResultMarginSettings = {'Type': "Contract", 'Superior': 0.0, 'Inferior': 0.0, 'Anterior': 0.0, 'Posterior': 0.0,
                                 'Right': 0.0, 'Left': 0.0}
-        Case.PatientModel.RegionsOfInterest[boost_ring_name].SetAlgebraExpression(ExpressionA=ExpressionA,
+        Case.PatientModel.RegionsOfInterest["RING PTVp_tumourbed"].SetAlgebraExpression(ExpressionA=ExpressionA,
                                                                                         ExpressionB=ExpressionB,
                                                                                         ResultOperation=ResultOperation,
                                                                                         ResultMarginSettings=ResultMarginSettings)
-    Case.PatientModel.RegionsOfInterest[boost_ring_name].UpdateDerivedGeometry(
+    Case.PatientModel.RegionsOfInterest["RING PTVp_tumourbed"].UpdateDerivedGeometry(
         Examination=Case.Examinations[exam], Algorithm="Auto")
 
-    ring_minus_boost_name = "RING PTV TOT - " + boost_name
-    if ring_minus_boost_name not in roi_list:
-        Case.PatientModel.CreateRoi(Name=ring_minus_boost_name, Color="255,128,0", Type="Undefined",
+    if "RING PTV TOT - PTVp_tumourbed" not in roi_list:
+        Case.PatientModel.CreateRoi(Name="RING PTV TOT - PTVp_tumourbed", Color="255,128,0", Type="Undefined",
                                     TissueName=None, RbeCellTypeName=None, RoiMaterial=None)
         ExpressionA = {'Operation': "Union", 'SourceRoiNames': ["RING PTV TOT"],
                        'MarginSettings': {'Type': "Expand", 'Superior': 0.0, 'Inferior': 0.0, 'Anterior': 0.0,
                                           'Posterior': 0.0, 'Right': 0.0, 'Left': 0.0}}
-        ExpressionB = {'Operation': "Union", 'SourceRoiNames': [boost_ring_name],
+        ExpressionB = {'Operation': "Union", 'SourceRoiNames': ["RING PTVp_tumourbed"],
                        'MarginSettings': {'Type': "Expand", 'Superior': 0.0, 'Inferior': 0.0, 'Anterior': 0.0,
                                           'Posterior': 0.0, 'Right': 0.0, 'Left': 0.0}}
         ResultOperation = "Subtraction"
         ResultMarginSettings = {'Type': "Contract", 'Superior': 0.0, 'Inferior': 0.0, 'Anterior': 0.0, 'Posterior': 0.0,
                                 'Right': 0.0, 'Left': 0.0}
-        Case.PatientModel.RegionsOfInterest[ring_minus_boost_name].SetAlgebraExpression(
+        Case.PatientModel.RegionsOfInterest["RING PTV TOT - PTVp_tumourbed"].SetAlgebraExpression(
             ExpressionA=ExpressionA, ExpressionB=ExpressionB, ResultOperation=ResultOperation,
             ResultMarginSettings=ResultMarginSettings)
-    Case.PatientModel.RegionsOfInterest[ring_minus_boost_name].UpdateDerivedGeometry(
+    Case.PatientModel.RegionsOfInterest["RING PTV TOT - PTVp_tumourbed"].UpdateDerivedGeometry(
         Examination=Case.Examinations[exam], Algorithm="Auto")
 
-    name_ptv_minus_boost_4mm = "PTVp_breast-(" + boost_abbrev_name + "+4mm)"
-    if name_ptv_minus_boost_4mm not in roi_list:
-        Case.PatientModel.CreateRoi(Name=name_ptv_minus_boost_4mm, Color="0,255,255", Type="PTV", TissueName=None,
+    if "PTVp_breast-(tbed+4mm)" not in roi_list:
+        Case.PatientModel.CreateRoi(Name="PTVp_breast-(tbed+4mm)", Color="0,255,255", Type="PTV", TissueName=None,
                                     RbeCellTypeName=None, RoiMaterial=None)
         ExpressionA = {'Operation': "Union", 'SourceRoiNames': ["PTVp_breast"],
                        'MarginSettings': {'Type': "Expand", 'Superior': 0.0, 'Inferior': 0.0, 'Anterior': 0.0,
                                           'Posterior': 0.0, 'Right': 0.0, 'Left': 0.0}}
-        ExpressionB = {'Operation': "Union", 'SourceRoiNames': [boost_name],
+        ExpressionB = {'Operation': "Union", 'SourceRoiNames': ["PTVp_tumourbed"],
                        'MarginSettings': {'Type': "Expand", 'Superior': 0.4, 'Inferior': 0.4, 'Anterior': 0.4,
                                           'Posterior': 0.4, 'Right': 0.4, 'Left': 0.4}}
         ResultOperation = "Subtraction"
         ResultMarginSettings = {'Type': "Contract", 'Superior': 0.0, 'Inferior': 0.0, 'Anterior': 0.0, 'Posterior': 0.0,
                                 'Right': 0.0, 'Left': 0.0}
-        Case.PatientModel.RegionsOfInterest[name_ptv_minus_boost_4mm].SetAlgebraExpression(ExpressionA=ExpressionA,
+        Case.PatientModel.RegionsOfInterest["PTVp_breast-(tbed+4mm)"].SetAlgebraExpression(ExpressionA=ExpressionA,
                                                                                            ExpressionB=ExpressionB,
                                                                                            ResultOperation=ResultOperation,
                                                                                            ResultMarginSettings=ResultMarginSettings)
-    Case.PatientModel.RegionsOfInterest[name_ptv_minus_boost_4mm].UpdateDerivedGeometry(
+    Case.PatientModel.RegionsOfInterest["PTVp_breast-(tbed+4mm)"].UpdateDerivedGeometry(
         Examination=Case.Examinations[exam], Algorithm="Auto")
 
-    name_boost_2mm = boost_name + "+2mm"
-    if name_boost_2mm not in roi_list:
-        Case.PatientModel.CreateRoi(Name=name_boost_2mm, Color="0,128,64", Type="PTV", TissueName=None,
+    if "PTVp_tumourbed+2mm" not in roi_list:
+        Case.PatientModel.CreateRoi(Name="PTVp_tumourbed+2mm", Color="0,128,64", Type="PTV", TissueName=None,
                                     RbeCellTypeName=None, RoiMaterial=None)
-        ExpressionA = {'Operation': "Union", 'SourceRoiNames': [boost_name],
+        ExpressionA = {'Operation': "Union", 'SourceRoiNames': ["PTVp_tumourbed"],
                        'MarginSettings': {'Type': "Expand", 'Superior': 0.2, 'Inferior': 0.2, 'Anterior': 0.2,
                                           'Posterior': 0.2, 'Right': 0.2, 'Left': 0.2}}
         ExpressionB = {'Operation': "Union", 'SourceRoiNames': [],
@@ -445,31 +456,30 @@ if "CTVp_tumourbed" or "GTVp_tumour" or "CTVp_tumour" in roi_list:
         ResultOperation = "None"
         ResultMarginSettings = {'Type': "Contract", 'Superior': 0.0, 'Inferior': 0.0, 'Anterior': 0.0, 'Posterior': 0.0,
                                 'Right': 0.0, 'Left': 0.0}
-        Case.PatientModel.RegionsOfInterest[name_boost_2mm].SetAlgebraExpression(ExpressionA=ExpressionA,
+        Case.PatientModel.RegionsOfInterest["PTVp_tumourbed+2mm"].SetAlgebraExpression(ExpressionA=ExpressionA,
                                                                                        ExpressionB=ExpressionB,
                                                                                        ResultOperation=ResultOperation,
                                                                                        ResultMarginSettings=ResultMarginSettings)
-    Case.PatientModel.RegionsOfInterest[name_boost_2mm].UpdateDerivedGeometry(Examination=Case.Examinations[exam],
+    Case.PatientModel.RegionsOfInterest["PTVp_tumourbed+2mm"].UpdateDerivedGeometry(Examination=Case.Examinations[exam],
                                                                                     Algorithm="Auto")
 
-    ptv_minus_boost_name = "PTVp_breast-" + boost_abbrev_name
-    if ptv_minus_boost_name not in roi_list:
-        Case.PatientModel.CreateRoi(Name=ptv_minus_boost_name, Color="255,165,0", Type="PTV", TissueName=None,
+    if "PTVp_breast-tbed" not in roi_list:
+        Case.PatientModel.CreateRoi(Name="PTVp_breast-tbed", Color="255,165,0", Type="PTV", TissueName=None,
                                     RbeCellTypeName=None, RoiMaterial=None)
         ExpressionA = {'Operation': "Union", 'SourceRoiNames': ["PTVp_breast"],
                        'MarginSettings': {'Type': "Expand", 'Superior': 0.0, 'Inferior': 0.0, 'Anterior': 0.0,
                                           'Posterior': 0.0, 'Right': 0.0, 'Left': 0.0}}
-        ExpressionB = {'Operation': "Union", 'SourceRoiNames': [boost_name],
+        ExpressionB = {'Operation': "Union", 'SourceRoiNames': ["PTVp_tumourbed"],
                        'MarginSettings': {'Type': "Expand", 'Superior': 0.0, 'Inferior': 0.0, 'Anterior': 0.0,
                                           'Posterior': 0.0, 'Right': 0.0, 'Left': 0.0}}
         ResultOperation = "Subtraction"
         ResultMarginSettings = {'Type': "Contract", 'Superior': 0.0, 'Inferior': 0.0, 'Anterior': 0.0, 'Posterior': 0.0,
                                 'Right': 0.0, 'Left': 0.0}
-        Case.PatientModel.RegionsOfInterest[ptv_minus_boost_name].SetAlgebraExpression(ExpressionA=ExpressionA,
+        Case.PatientModel.RegionsOfInterest["PTVp_breast-tbed"].SetAlgebraExpression(ExpressionA=ExpressionA,
                                                                                      ExpressionB=ExpressionB,
                                                                                      ResultOperation=ResultOperation,
                                                                                      ResultMarginSettings=ResultMarginSettings)
-    Case.PatientModel.RegionsOfInterest[ptv_minus_boost_name].UpdateDerivedGeometry(Examination=Case.Examinations[exam],
+    Case.PatientModel.RegionsOfInterest["PTVp_breast-tbed"].UpdateDerivedGeometry(Examination=Case.Examinations[exam],
                                                                                   Algorithm="Auto")
 
 if "CTVp_tumourbed_L" in roi_list:
@@ -898,5 +908,41 @@ Case.PatientModel.RegionsOfInterest['Cylindre_L=26cmR=25cm'].CreateCylinderGeome
 
 print(min(x), max(x))
 print(min(y), max(y))
+
+Patient.Save()
+
+
+# Pop up alertant l'utilisateur quand le PTV TOT sort du FOV du CBCT
+
+# Création d'une roi en faisant l'opération PTV TOT - roi représentant le FOV CBCT
+roi_test_recoupe = Case.PatientModel.CreateRoi(Name="roi_test_recoupe", Color="255,192,203", Type="Undefined", TissueName=None,
+                            RbeCellTypeName=None, RoiMaterial=None)
+ExpressionA = {'Operation': "Union", 'SourceRoiNames': ["PTV TOT"],
+               'MarginSettings': {'Type': "Expand", 'Superior': 0.0, 'Inferior': 0.0, 'Anterior': 0.0,
+                                  'Posterior': 0.0, 'Right': 0.0, 'Left': 0.0}}
+ExpressionB = {'Operation': "Union", 'SourceRoiNames': ["Cylindre_L=26cmR=25cm"],
+               'MarginSettings': {'Type': "Contract", 'Superior': 0, 'Inferior': 0, 'Anterior': 0,
+                                  'Posterior': 0, 'Right': 0, 'Left': 0}}
+ResultOperation = "Subtraction"
+ResultMarginSettings = {'Type': "Contract", 'Superior': 0.0, 'Inferior': 0.0, 'Anterior': 0.0, 'Posterior': 0.0,
+                        'Right': 0.0, 'Left': 0.0}
+roi_test_recoupe.SetAlgebraExpression(ExpressionA=ExpressionA, ExpressionB=ExpressionB, ResultOperation=ResultOperation,
+                                      ResultMarginSettings=ResultMarginSettings)
+roi_test_recoupe.UpdateDerivedGeometry(Examination=examination, Algorithm="Auto")
+
+# Si la ROI résultante est vide -> le PTV TOT ne sort pas du FOV CBCT, si elle a des contours le PTV TOT sort du FOV CBCT
+if Case.PatientModel.StructureSets[exam].RoiGeometries["roi_test_recoupe"].HasContours():
+    root_pop_up = Tk()
+    root_pop_up.title("Alerte")
+    root_pop_up.geometry("370x75")
+    Label(root_pop_up,
+          text="Attention, le PTV TOT sort du FOV du CBCT ! Décaler l'isocentre.").grid(
+        row=1, column=1, padx=10, pady=10)
+    Button(root_pop_up, text='OK', command=root_pop_up.destroy, height=1, width=10).grid(row=2, column=1)
+    root_pop_up.bind('<Return>', lambda event: root_pop_up.destroy())
+    root_pop_up.bind('<Escape>', lambda event: sys.exit())
+    mainloop()
+
+roi_test_recoupe.DeleteRoi()
 
 Patient.Save()
