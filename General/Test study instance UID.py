@@ -70,7 +70,7 @@ elif is_study_shadow == False and is_study_instance_uid_corrupted:
     message = 'Attention le Study Instance UID du CT "' + ct_dosi_name + '" est corrompu, contactez le physicien ' \
                                                                         'de garde (4905).'
 else:
-    message = 'Le CT n\'est pas corrompu, vous pouvez contourer dessus.'
+    message = 'Le CT n\'est pas corrompu, vous pouvez contourer/faire la dosimétrie dessus.'
 
 print(message)
 root_pop_up = Tk()
