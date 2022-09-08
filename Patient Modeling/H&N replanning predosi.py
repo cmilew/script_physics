@@ -1,212 +1,693 @@
 from connect import *
 # -*- coding: utf-8 -*-
-from tkinter import*
+from tkinter import *
+import tkinter.ttk as ttk
+import platform
 
+from tkinter.messagebox import *
+
+# Ajout 26/11/2020########################
+# patient_db = get_current("PatientDB")
+# templateNames = patient_db.GetTemplateMaterialNames()
+# templateList = patient_db.GetTemplateMaterial()
+# template = [x for x in templateList.Materials if x.Name == "Water"]
+##########################
 
 try:
-	Case=get_current('Case')
-	Examination=get_current('Examination')
+    Case = get_current('Case')
+    Examination = get_current('Examination')
 except:
-	print('No case / examination selected')
-	
-	
+    print('No case / examination selected')
 
-Nom_CT_selectionne=Examination.Name
+Nom_CT_selectionne = Examination.Name
+# Get ROI geometries for the syructure set of the current examination
+roi_geometries = Case.PatientModel.StructureSets[Nom_CT_selectionne].RoiGeometries
 
-#copier/coller les geometries et supprimer
 
-roi_geometries=Case.PatientModel.StructureSets[Nom_CT_selectionne].RoiGeometries
-'''
-rois_a_modifier=['CTV High Dose','CTV Medium Dose','CTV Low Dose','PTV High Dose','PTV Medium Dose','PTV Low Dose']
+# STUDY SHADOW & STUDY INSTANCE UID TEST ########################################
 
-for roi in rois_a_modifier:
-	Case.PatientModel.RegionsOfInterest[roi+"_1"].Name = roi
-	
-'''
-PTVs=[]
+def checks_quit_script():
+    """ Function aiming to close any pop-up when the red-cross is clicked """
+    global quit_script
+    if quit_script:
+        print('Pop-up was quit by red-cross click -> exiting')
+        sys.exit()
+    quit_script = True
+
+
+is_study_shadow = False
+is_study_instance_uid_corrupted = False
+
+# Study shadow test
+try:
+    study_shadow_test = Examination.GetStoredDicomTagValueForVerification(Group=0x0008, Element=0x0050)
+    print(study_shadow_test)
+except:
+    is_study_shadow = True
+
+# Study instance UID verification
+study_instance_uid = str(Examination.GetStoredDicomTagValueForVerification(Group=0x0020, Element=0x000D))
+# Gets groups separated by '.'
+groups = study_instance_uid.split('.')
+# if group starts with 0 and is not '.0.', study instance uid is corrupted
+is_study_instance_uid_corrupted = any(group.startswith('0') and group != '0' for group in groups)
+
+# Message to display in pop up
+if is_study_shadow and is_study_instance_uid_corrupted:
+    message = 'Attention le CT "' + Nom_CT_selectionne + '" est un study shadow ET son study Instance UID du CT est ' \
+                                                         'corrompu, contactez le physicien de garde (4905).'
+elif is_study_shadow and is_study_instance_uid_corrupted == False:
+    message = 'Attention, le CT "' + Nom_CT_selectionne + '" est un study shadow, contacter le physicien de garde (4905)'
+elif is_study_shadow == False and is_study_instance_uid_corrupted:
+    message = 'Attention le Study Instance UID du CT "' + Nom_CT_selectionne + '" est corrompu, contactez le physicien ' \
+                                                                               'de garde (4905).'
+quit_script = True
+if is_study_shadow or is_study_instance_uid_corrupted:
+    print(message)
+    root_pop_up = Tk()
+    root_pop_up.title("")
+    Label(root_pop_up, text=message, foreground='red', font='Calibri 12 bold').grid(row=1, column=1, padx=5, pady=5)
+    Button(root_pop_up, text='OK', command=sys.exit, width=10).grid(row=2, column=1, padx=5, pady=5)
+    root_pop_up.bind('<Return>', lambda event: sys.exit())
+    root_pop_up.bind('<Escape>', lambda event: sys.exit())
+    mainloop()
+    checks_quit_script()
+
+##################################
+# Obtenir la liste des PTV et ,nom du contour externe
+###################################
+PTVs = []
 for roi in roi_geometries:
-    if Case.PatientModel.RegionsOfInterest[roi.OfRoi.Name].Type =='External':
-        External=roi.OfRoi.Name
-    if Case.PatientModel.RegionsOfInterest[roi.OfRoi.Name].Type =='Ptv':
+    if Case.PatientModel.RegionsOfInterest[roi.OfRoi.Name].Type == 'External':
+        External = roi.OfRoi.Name
+    if Case.PatientModel.RegionsOfInterest[roi.OfRoi.Name].Type == 'Ptv':
         PTVs.append(roi.OfRoi.Name)
-print("PTVs:",PTVs)
-Nombre_de_PTV=len(PTVs)
-print('Le nombre de PTV est :',Nombre_de_PTV)
+print("PTVs:", PTVs)
+Nombre_de_PTV = len(PTVs)
+print('Le nombre de PTV est :', Nombre_de_PTV)
+
+##################################
+# Obtenir la liste des OARs
+###################################
+
+OARs = []
+
+for roi in roi_geometries:
+    if Case.PatientModel.RegionsOfInterest[roi.OfRoi.Name].Type == 'Organ':
+        OARs.append(roi.OfRoi.Name)
+
+print(OARs)
+
+#########################################################################################
+#########################################################################################
+#########################################################################################
 
 
-def ring_ORL_2PTV(ring_name,r_ring,zz_a):
-    #Case.PatientModel.CreateRoi(Name=ring_name, Color="Red", Type="Undefined", TissueName=None, RbeCellTypeName=None, RoiMaterial=None)
-    Case.PatientModel.RegionsOfInterest[ring_name].SetAlgebraExpression(ExpressionA={ 'Operation': "Union", 'SourceRoiNames': [r_ring], 'MarginSettings': { 'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0, 'Right': 0, 'Left': 0 } }, ExpressionB={ 'Operation': "Union", 'SourceRoiNames': [zz_a], 'MarginSettings': { 'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0, 'Right': 0, 'Left': 0 } }, ResultOperation="Subtraction", ResultMarginSettings={ 'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0, 'Right': 0, 'Left': 0 })
-    Case.PatientModel.RegionsOfInterest[ring_name].UpdateDerivedGeometry(Examination=Examination, Algorithm="Auto")
-    #Case.PatientModel.StructureSets[Examination].SimplifyContours(RoiNames=[ring_name], RemoveHoles3D=False, RemoveSmallContours=True, AreaThreshold=0.1, ReduceMaxNumberOfPointsInContours=False, MaxNumberOfPoints=None, CreateCopyOfRoi=False, ResolveOverlappingContours=False)
+############
+# ARTEFACTS
+############
+try:
+    Case.PatientModel.CreateRoi(Name=r"Artefact", Color="Brown", Type="Undefined", TissueName=None,
+                                RbeCellTypeName=None, RoiMaterial=None)
+    if Case.PatientModel.Materials[0].Name == 'Water':
+        Case.PatientModel.RegionsOfInterest['Artefact'].SetRoiMaterial(Material=Case.PatientModel.Materials[0])
+    else:
+        print("Attention, La densite des artefacts n'a pas pu etre affectee")
+    # Case.PatientModel.RegionsOfInterest['Artefact'].SetRoiMaterial(Material=template[0])
+except:
+    print("Artefact existe déjà")
 
-    return True
+##############
+# DUMMYs
+#############
+try:
+    color = System.Drawing.Color.FromArgb(255, 128, 0, 64)
+    Case.PatientModel.CreateRoi(Name=r"Dummy cerveau", Color=color, Type="Undefined", TissueName=None,
+                                RbeCellTypeName=None, RoiMaterial=None)
+    Case.PatientModel.CreateRoi(Name=r"Dummy cou", Color='Purple', Type="Undefined", TissueName=None,
+                                RbeCellTypeName=None, RoiMaterial=None)
+    color = System.Drawing.Color.FromArgb(255, 64, 0, 64)
+    Case.PatientModel.CreateRoi(Name=r"Dummy BM", Color=color, Type="Undefined", TissueName=None, RbeCellTypeName=None,
+                                RoiMaterial=None)
+    color = System.Drawing.Color.FromArgb(255, 192, 0, 192)
+    Case.PatientModel.CreateRoi(Name=r"Dummy lat", Color=color, Type="Undefined", TissueName=None, RbeCellTypeName=None,
+                                RoiMaterial=None)
+except:
+    print("les dummy existent déjà")
 
-def RING(PTV,Sup,Inf):
+###################
+# PRV Moelle (3mm)
+###################
+try:
+    if Case.PatientModel.StructureSets[Nom_CT_selectionne].RoiGeometries['Moelle'].HasContours() == True:
+        Case.PatientModel.CreateRoi(Name=r"PRV Moelle", Color='Yellow', Type="Organ", TissueName=None,
+                                    RbeCellTypeName=None, RoiMaterial=None)
+        Case.PatientModel.RegionsOfInterest["PRV Moelle"].SetAlgebraExpression(
+            ExpressionA={'Operation': "Union", 'SourceRoiNames': [r"Moelle"],
+                         'MarginSettings': {'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0.3,
+                                            'Posterior': 0.3, 'Right': 0.3, 'Left': 0.3}},
+            ExpressionB={'Operation': "Union", 'SourceRoiNames': [],
+                         'MarginSettings': {'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0,
+                                            'Posterior': 0, 'Right': 0, 'Left': 0}}, ResultOperation="None",
+            ResultMarginSettings={'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0,
+                                  'Right': 0, 'Left': 0})
+        Case.PatientModel.RegionsOfInterest["PRV Moelle"].UpdateDerivedGeometry(Examination=Examination,
+                                                                                Algorithm="Auto")
+except:
+    print("PRV moelle existe deja")
+###################
+# PRV Tronc (3mm)
+###################
+try:
+    if Case.PatientModel.StructureSets[Nom_CT_selectionne].RoiGeometries['Tronc Cérébral'].HasContours() == True:
+        Case.PatientModel.CreateRoi(Name=r"PRV Tronc Cérébral", Color='Orange', Type="Organ", TissueName=None,
+                                    RbeCellTypeName=None, RoiMaterial=None)
+        Case.PatientModel.RegionsOfInterest["PRV Tronc Cérébral"].SetAlgebraExpression(
+            ExpressionA={'Operation': "Union", 'SourceRoiNames': [r"Tronc Cérébral"],
+                         'MarginSettings': {'Type': "Expand", 'Superior': 0.3, 'Inferior': 0, 'Anterior': 0.3,
+                                            'Posterior': 0.3, 'Right': 0.3, 'Left': 0.3}},
+            ExpressionB={'Operation': "Union", 'SourceRoiNames': [],
+                         'MarginSettings': {'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0,
+                                            'Posterior': 0, 'Right': 0, 'Left': 0}}, ResultOperation="None",
+            ResultMarginSettings={'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0,
+                                  'Right': 0, 'Left': 0})
+        Case.PatientModel.RegionsOfInterest["PRV Tronc Cérébral"].UpdateDerivedGeometry(Examination=Examination,
+                                                                                        Algorithm="Auto")
+except:
+    print("PRV TC deja")
+#########################
+# PRV voies optique +2mm
+#########################
+try:
+    OAR_optique = ["Nerf Optique D", "Nerf Optique G", "Chiasma", "Cochlée D", "Cochlée G"]
+    marge = 0.2
+    for roi in OAR_optique:
+        if Case.PatientModel.StructureSets[Nom_CT_selectionne].RoiGeometries[roi].HasContours() == True:
+            nom = "PRV " + roi
+            color = Case.PatientModel.RegionsOfInterest[roi].Color
+            Case.PatientModel.CreateRoi(Name=nom, Color=color, Type="Organ", TissueName=None, RbeCellTypeName=None,
+                                        RoiMaterial=None)
+            Case.PatientModel.RegionsOfInterest[nom].SetAlgebraExpression(
+                ExpressionA={'Operation': "Union", 'SourceRoiNames': [roi],
+                             'MarginSettings': {'Type': "Expand", 'Superior': marge, 'Inferior': marge,
+                                                'Anterior': marge, 'Posterior': marge, 'Right': marge, 'Left': marge}},
+                ExpressionB={'Operation': "Union", 'SourceRoiNames': [],
+                             'MarginSettings': {'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0,
+                                                'Posterior': 0, 'Right': 0, 'Left': 0}}, ResultOperation="None",
+                ResultMarginSettings={'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0,
+                                      'Right': 0, 'Left': 0})
+            Case.PatientModel.RegionsOfInterest[nom].UpdateDerivedGeometry(Examination=Examination, Algorithm="Auto")
+except:
+    print("PRV optiques existent deja")
 
-    color=Case.PatientModel.RegionsOfInterest[PTV].Color
-    Case.PatientModel.CreateRoi(Name=r"RING_TEMP", Color="Black", Type="Undefined", TissueName=None, RbeCellTypeName=None, RoiMaterial=None)
-    Case.PatientModel.RegionsOfInterest["RING_TEMP"].SetAlgebraExpression(ExpressionA={ 'Operation': "Union", 'SourceRoiNames': [PTV], 'MarginSettings': { 'Type': "Expand", 'Superior': Sup, 'Inferior': Sup, 'Anterior': Sup, 'Posterior': Sup, 'Right': Sup, 'Left': Sup } }, ExpressionB={ 'Operation': "Union", 'SourceRoiNames': [PTV], 'MarginSettings': { 'Type': "Expand", 'Superior': Inf, 'Inferior': Inf, 'Anterior': Inf, 'Posterior': Inf, 'Right': Inf, 'Left': Inf } }, ResultOperation="Subtraction", ResultMarginSettings={ 'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0, 'Right': 0, 'Left': 0 })
+
+#########################################################################################
+#########################################################################################
+#########################################################################################
+
+def RING(PTV, Sup, Inf):
+    color = Case.PatientModel.RegionsOfInterest[PTV].Color
+    Case.PatientModel.CreateRoi(Name=r"RING_TEMP", Color="Black", Type="Undefined", TissueName=None,
+                                RbeCellTypeName=None, RoiMaterial=None)
+    Case.PatientModel.RegionsOfInterest["RING_TEMP"].SetAlgebraExpression(
+        ExpressionA={'Operation': "Union", 'SourceRoiNames': [PTV],
+                     'MarginSettings': {'Type': "Expand", 'Superior': Sup, 'Inferior': Sup, 'Anterior': Sup,
+                                        'Posterior': Sup, 'Right': Sup, 'Left': Sup}},
+        ExpressionB={'Operation': "Union", 'SourceRoiNames': [PTV],
+                     'MarginSettings': {'Type': "Expand", 'Superior': Inf, 'Inferior': Inf, 'Anterior': Inf,
+                                        'Posterior': Inf, 'Right': Inf, 'Left': Inf}}, ResultOperation="Subtraction",
+        ResultMarginSettings={'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0, 'Right': 0,
+                              'Left': 0})
     Case.PatientModel.RegionsOfInterest["RING_TEMP"].UpdateDerivedGeometry(Examination=Examination, Algorithm="Auto")
-    #nom="NOM"
-    nom='RING_'+PTV+'_'+str(Sup)+'_'+str(Inf)
-    print("NOM:"+nom)
-    
-    Case.PatientModel.CreateRoi(Name=nom, Color=color, Type="Undefined", TissueName=None, RbeCellTypeName=None, RoiMaterial=None)
-    Case.PatientModel.RegionsOfInterest[nom].SetAlgebraExpression(ExpressionA={ 'Operation': "Union", 'SourceRoiNames': [r"RING_TEMP"], 'MarginSettings': { 'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0, 'Right': 0, 'Left': 0 } }, ExpressionB={ 'Operation': "Union", 'SourceRoiNames': [External], 'MarginSettings': { 'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0, 'Right': 0, 'Left': 0 } }, ResultOperation="Intersection", ResultMarginSettings={ 'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0, 'Right': 0, 'Left': 0 })
+    # nom="NOM"
+    nom = 'RING_' + PTV + '_' + str(Sup) + '_' + str(Inf)
+    print("NOM:" + nom)
+
+    Case.PatientModel.CreateRoi(Name=nom, Color=color, Type="Undefined", TissueName=None, RbeCellTypeName=None,
+                                RoiMaterial=None)
+    Case.PatientModel.RegionsOfInterest[nom].SetAlgebraExpression(
+        ExpressionA={'Operation': "Union", 'SourceRoiNames': [r"RING_TEMP"],
+                     'MarginSettings': {'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0,
+                                        'Right': 0, 'Left': 0}},
+        ExpressionB={'Operation': "Union", 'SourceRoiNames': [External],
+                     'MarginSettings': {'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0,
+                                        'Right': 0, 'Left': 0}}, ResultOperation="Intersection",
+        ResultMarginSettings={'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0, 'Right': 0,
+                              'Left': 0})
     Case.PatientModel.RegionsOfInterest[nom].UpdateDerivedGeometry(Examination=Examination, Algorithm="Auto")
 
     Case.PatientModel.RegionsOfInterest["RING_TEMP"].DeleteRoi()
     return nom
-def ring_ORL_3PTV(ring_name,r_ring,zz_a,zz_b):
-    Case.PatientModel.RegionsOfInterest[ring_name].SetAlgebraExpression(ExpressionA={ 'Operation': "Union", 'SourceRoiNames': [r_ring], 'MarginSettings': { 'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0, 'Right': 0, 'Left': 0 } }, ExpressionB={ 'Operation': "Union", 'SourceRoiNames': [zz_a, zz_b], 'MarginSettings': { 'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0, 'Right': 0, 'Left': 0 } }, ResultOperation="Subtraction", ResultMarginSettings={ 'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0, 'Right': 0, 'Left': 0 })
+
+
+def ring_ORL_3PTV(ring_name, r_ring, zz_a, zz_b):
+    Case.PatientModel.RegionsOfInterest[ring_name].SetAlgebraExpression(
+        ExpressionA={'Operation': "Union", 'SourceRoiNames': [r_ring],
+                     'MarginSettings': {'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0,
+                                        'Right': 0, 'Left': 0}},
+        ExpressionB={'Operation': "Union", 'SourceRoiNames': [zz_a, zz_b],
+                     'MarginSettings': {'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0,
+                                        'Right': 0, 'Left': 0}}, ResultOperation="Subtraction",
+        ResultMarginSettings={'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0, 'Right': 0,
+                              'Left': 0})
     Case.PatientModel.RegionsOfInterest[ring_name].UpdateDerivedGeometry(Examination=Examination, Algorithm="Auto")
-  #Case.PatientModel.StructureSets[Examination].SimplifyContours(RoiNames=[ring_name], RemoveHoles3D=False, RemoveSmallContours=True, AreaThreshold=0.1, ReduceMaxNumberOfPointsInContours=False, MaxNumberOfPoints=None, CreateCopyOfRoi=False, ResolveOverlappingContours=False)
+    # Case.PatientModel.StructureSets[Examination].SimplifyContours(RoiNames=[ring_name], RemoveHoles3D=False, RemoveSmallContours=True, AreaThreshold=0.1, ReduceMaxNumberOfPointsInContours=False, MaxNumberOfPoints=None, CreateCopyOfRoi=False, ResolveOverlappingContours=False)
 
     return True
-if Nombre_de_PTV==3:
+
+
+def ring_ORL_2PTV(ring_name, r_ring, zz_a):
+    # Case.PatientModel.CreateRoi(Name=ring_name, Color="Red", Type="Undefined", TissueName=None, RbeCellTypeName=None, RoiMaterial=None)
+    Case.PatientModel.RegionsOfInterest[ring_name].SetAlgebraExpression(
+        ExpressionA={'Operation': "Union", 'SourceRoiNames': [r_ring],
+                     'MarginSettings': {'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0,
+                                        'Right': 0, 'Left': 0}},
+        ExpressionB={'Operation': "Union", 'SourceRoiNames': [zz_a],
+                     'MarginSettings': {'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0,
+                                        'Right': 0, 'Left': 0}}, ResultOperation="Subtraction",
+        ResultMarginSettings={'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0, 'Right': 0,
+                              'Left': 0})
+    Case.PatientModel.RegionsOfInterest[ring_name].UpdateDerivedGeometry(Examination=Examination, Algorithm="Auto")
+    # Case.PatientModel.StructureSets[Examination].SimplifyContours(RoiNames=[ring_name], RemoveHoles3D=False, RemoveSmallContours=True, AreaThreshold=0.1, ReduceMaxNumberOfPointsInContours=False, MaxNumberOfPoints=None, CreateCopyOfRoi=False, ResolveOverlappingContours=False)
+
+    return True
+
+
+if Nombre_de_PTV == 1:
+    if PTVs[0] == "PTV":
+        Case.PatientModel.RegionsOfInterest[r"PTV"].Name = r"PTV High Dose"
+
+################################################################################################
+################################################################################################
+#############  3 PTV ############################################################################
+################################################################################################
+################################################################################################
+
+if Nombre_de_PTV == 3:
     #########################
+    # PTV dosi
+    #########################
+    Gap_LD = 0.2
+    Gap_MD = 0.2
+    try:
+        nom = "z_PTV Low Dose"
+        color = Case.PatientModel.RegionsOfInterest[r"PTV Low Dose"].Color
+        Case.PatientModel.CreateRoi(Name=nom, Color=color, Type="Undefined", TissueName=None, RbeCellTypeName=None,
+                                    RoiMaterial=None)
+        Case.PatientModel.RegionsOfInterest[nom].SetAlgebraExpression(
+            ExpressionA={'Operation': "Union", 'SourceRoiNames': [r"PTV Low Dose"],
+                         'MarginSettings': {'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0,
+                                            'Posterior': 0, 'Right': 0, 'Left': 0}},
+            ExpressionB={'Operation': "Union", 'SourceRoiNames': [r"PTV Medium Dose"],
+                         'MarginSettings': {'Type': "Expand", 'Superior': Gap_LD, 'Inferior': Gap_LD,
+                                            'Anterior': Gap_LD, 'Posterior': Gap_LD, 'Right': Gap_LD, 'Left': Gap_LD}},
+            ResultOperation="Subtraction",
+            ResultMarginSettings={'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0,
+                                  'Right': 0, 'Left': 0})
+        Case.PatientModel.RegionsOfInterest[nom].UpdateDerivedGeometry(Examination=Examination, Algorithm="Auto")
+        nom = "z_PTV Medium Dose"
+        color = Case.PatientModel.RegionsOfInterest["PTV Medium Dose"].Color
+        Case.PatientModel.CreateRoi(Name=nom, Color=color, Type="Undefined", TissueName=None, RbeCellTypeName=None,
+                                    RoiMaterial=None)
+        Case.PatientModel.RegionsOfInterest[nom].SetAlgebraExpression(
+            ExpressionA={'Operation': "Union", 'SourceRoiNames': [r"PTV Medium Dose"],
+                         'MarginSettings': {'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0,
+                                            'Posterior': 0, 'Right': 0, 'Left': 0}},
+            ExpressionB={'Operation': "Union", 'SourceRoiNames': [r"PTV High Dose"],
+                         'MarginSettings': {'Type': "Expand", 'Superior': Gap_MD, 'Inferior': Gap_MD,
+                                            'Anterior': Gap_MD, 'Posterior': Gap_MD, 'Right': Gap_MD, 'Left': Gap_MD}},
+            ResultOperation="Subtraction",
+            ResultMarginSettings={'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0,
+                                  'Right': 0, 'Left': 0})
+        Case.PatientModel.RegionsOfInterest[nom].UpdateDerivedGeometry(Examination=Examination, Algorithm="Auto")
+    except:
+        print("z_PTV dosi existent deja")
+
+    # Gap PTV LOw dose: 1.5cm; Md=1cm
+    Gap_LD = 1.5
+    Gap_MD = 1
+
+    try:
+        nom = "z_PTV Low Dose " + str(Gap_LD) + "cm"
+        color = Case.PatientModel.RegionsOfInterest[r"PTV Low Dose"].Color
+        Case.PatientModel.CreateRoi(Name=nom, Color=color, Type="Undefined", TissueName=None, RbeCellTypeName=None,
+                                    RoiMaterial=None)
+        Case.PatientModel.RegionsOfInterest[nom].SetAlgebraExpression(
+            ExpressionA={'Operation': "Union", 'SourceRoiNames': [r"PTV Low Dose"],
+                         'MarginSettings': {'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0,
+                                            'Posterior': 0, 'Right': 0, 'Left': 0}},
+            ExpressionB={'Operation': "Union", 'SourceRoiNames': [r"PTV Medium Dose"],
+                         'MarginSettings': {'Type': "Expand", 'Superior': Gap_LD, 'Inferior': Gap_LD,
+                                            'Anterior': Gap_LD, 'Posterior': Gap_LD, 'Right': Gap_LD, 'Left': Gap_LD}},
+            ResultOperation="Subtraction",
+            ResultMarginSettings={'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0,
+                                  'Right': 0, 'Left': 0})
+        Case.PatientModel.RegionsOfInterest[nom].UpdateDerivedGeometry(Examination=Examination, Algorithm="Auto")
+        nom = "z_PTV Medium Dose " + str(Gap_MD) + "cm"
+        color = Case.PatientModel.RegionsOfInterest["PTV Medium Dose"].Color
+        Case.PatientModel.CreateRoi(Name=nom, Color=color, Type="Undefined", TissueName=None, RbeCellTypeName=None,
+                                    RoiMaterial=None)
+        Case.PatientModel.RegionsOfInterest[nom].SetAlgebraExpression(
+            ExpressionA={'Operation': "Union", 'SourceRoiNames': [r"PTV Medium Dose"],
+                         'MarginSettings': {'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0,
+                                            'Posterior': 0, 'Right': 0, 'Left': 0}},
+            ExpressionB={'Operation': "Union", 'SourceRoiNames': [r"PTV High Dose"],
+                         'MarginSettings': {'Type': "Expand", 'Superior': Gap_MD, 'Inferior': Gap_MD,
+                                            'Anterior': Gap_MD, 'Posterior': Gap_MD, 'Right': Gap_MD, 'Left': Gap_MD}},
+            ResultOperation="Subtraction",
+            ResultMarginSettings={'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0,
+                                  'Right': 0, 'Left': 0})
+        Case.PatientModel.RegionsOfInterest[nom].UpdateDerivedGeometry(Examination=Examination, Algorithm="Auto")
+    except:
+        print("PTV dosi existent deja")
+
+    Gap_LD = 0
+    Gap_MD = 0
+
+    try:
+        nom = "zz_PTV Low Dose"
+        color = Case.PatientModel.RegionsOfInterest[r"PTV Low Dose"].Color
+        Case.PatientModel.CreateRoi(Name=nom, Color=color, Type="Undefined", TissueName=None, RbeCellTypeName=None,
+                                    RoiMaterial=None)
+        Case.PatientModel.RegionsOfInterest[nom].SetAlgebraExpression(
+            ExpressionA={'Operation': "Union", 'SourceRoiNames': [r"PTV Low Dose"],
+                         'MarginSettings': {'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0,
+                                            'Posterior': 0, 'Right': 0, 'Left': 0}},
+            ExpressionB={'Operation': "Union", 'SourceRoiNames': [r"PTV Medium Dose"],
+                         'MarginSettings': {'Type': "Expand", 'Superior': Gap_LD, 'Inferior': Gap_LD,
+                                            'Anterior': Gap_LD, 'Posterior': Gap_LD, 'Right': Gap_LD, 'Left': Gap_LD}},
+            ResultOperation="Subtraction",
+            ResultMarginSettings={'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0,
+                                  'Right': 0, 'Left': 0})
+        Case.PatientModel.RegionsOfInterest[nom].UpdateDerivedGeometry(Examination=Examination, Algorithm="Auto")
+        nom = "zz_PTV Medium Dose"
+        color = Case.PatientModel.RegionsOfInterest["PTV Medium Dose"].Color
+        Case.PatientModel.CreateRoi(Name=nom, Color=color, Type="Undefined", TissueName=None, RbeCellTypeName=None,
+                                    RoiMaterial=None)
+        Case.PatientModel.RegionsOfInterest[nom].SetAlgebraExpression(
+            ExpressionA={'Operation': "Union", 'SourceRoiNames': [r"PTV Medium Dose"],
+                         'MarginSettings': {'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0,
+                                            'Posterior': 0, 'Right': 0, 'Left': 0}},
+            ExpressionB={'Operation': "Union", 'SourceRoiNames': [r"PTV High Dose"],
+                         'MarginSettings': {'Type': "Expand", 'Superior': Gap_MD, 'Inferior': Gap_MD,
+                                            'Anterior': Gap_MD, 'Posterior': Gap_MD, 'Right': Gap_MD, 'Left': Gap_MD}},
+            ResultOperation="Subtraction",
+            ResultMarginSettings={'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0,
+                                  'Right': 0, 'Left': 0})
+        Case.PatientModel.RegionsOfInterest[nom].UpdateDerivedGeometry(Examination=Examination, Algorithm="Auto")
+    except:
+        print("zz_PTV dosi existent deja")
+        #########################
     # Ring
     #########################
-    rois_a_modifier=['Ring_High_Dose','Ring_Medium_Dose','Ring_Low_Dose']
-    for roi in rois_a_modifier:
-        try:
-            Case.PatientModel.RegionsOfInterest[roi].Name = roi+"_1"
-        except:
-            print("roi ", roi, " n'existe pas")
 
-    #TEMP_RING:
-    
-    try:
-        Case.PatientModel.CreateRoi(Name=r"Ring_High_Dose", Color="Red", Type="Undefined", TissueName=None, RbeCellTypeName=None, RoiMaterial=None)
-        Case.PatientModel.CreateRoi(Name=r"Ring_Medium_Dose", Color="Green", Type="Undefined", TissueName=None, RbeCellTypeName=None, RoiMaterial=None)
-        Case.PatientModel.CreateRoi(Name=r"Ring_Low_Dose", Color="Blue", Type="Undefined", TissueName=None, RbeCellTypeName=None, RoiMaterial=None)
-    except:
-        print("TEMP RING existent deja") 
-		
-    try:
-        r_PTV_HD=RING('PTV High Dose',1.5,0.3)
-        r_PTV_MD=RING('PTV Medium Dose',1.5,0.3)
-        r_PTV_LD=RING('PTV Low Dose',1.5,0.3)
-    except:
-        print("TEMP RING 2 existent deja")
-    
-
+    # TEMP_RING:
 
     try:
-        r=ring_ORL_3PTV(r"Ring_High_Dose",r_PTV_HD,r"zz_PTV Low Dose",r"zz_PTV Medium Dose")
-        r=ring_ORL_3PTV(r"Ring_Medium_Dose",r_PTV_MD,r"zz_PTV Low Dose",r"Ring_High_Dose")
-        r=ring_ORL_3PTV(r"Ring_Low_Dose",r_PTV_LD,r"Ring_Medium_Dose",r"Ring_High_Dose")
-		
-
+        Case.PatientModel.CreateRoi(Name=r"Ring_High_Dose", Color="Red", Type="Undefined", TissueName=None,
+                                    RbeCellTypeName=None, RoiMaterial=None)
+        Case.PatientModel.CreateRoi(Name=r"Ring_Medium_Dose", Color="Green", Type="Undefined", TissueName=None,
+                                    RbeCellTypeName=None, RoiMaterial=None)
+        Case.PatientModel.CreateRoi(Name=r"Ring_Low_Dose", Color="Blue", Type="Undefined", TissueName=None,
+                                    RbeCellTypeName=None, RoiMaterial=None)
+        r_PTV_HD = RING('PTV High Dose', 1.5, 0.3)
+        r_PTV_MD = RING('PTV Medium Dose', 1.5, 0.3)
+        r_PTV_LD = RING('PTV Low Dose', 1.5, 0.3)
     except:
-        print("RING existent deja")      
-        
+        print("TEMP RING existent deja")
+
+    try:
+        Case.PatientModel.CreateRoi(Name=r"zz_PTV Low Dose", Color="Blue", Type="Undefined", TissueName=None,
+                                    RbeCellTypeName=None, RoiMaterial=None)
+        Case.PatientModel.RegionsOfInterest[r"zz_PTV Low Dose"].SetAlgebraExpression(
+            ExpressionA={'Operation': "Union", 'SourceRoiNames': [r"PTV Low Dose"],
+                         'MarginSettings': {'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0,
+                                            'Posterior': 0, 'Right': 0, 'Left': 0}},
+            ExpressionB={'Operation': "Union", 'SourceRoiNames': [r"PTV High Dose", r"PTV Medium Dose"],
+                         'MarginSettings': {'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0,
+                                            'Posterior': 0, 'Right': 0, 'Left': 0}}, ResultOperation="Subtraction",
+            ResultMarginSettings={'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0,
+                                  'Right': 0, 'Left': 0})
+        Case.PatientModel.RegionsOfInterest[r"zz_PTV Low Dose"].UpdateDerivedGeometry(Examination=Examination,
+                                                                                      Algorithm="Auto")
+        Case.PatientModel.CreateRoi(Name=r"zz_PTV Medium Dose", Color="Green", Type="Undefined", TissueName=None,
+                                    RbeCellTypeName=None, RoiMaterial=None)
+        Case.PatientModel.RegionsOfInterest[r"zz_PTV Medium Dose"].SetAlgebraExpression(
+            ExpressionA={'Operation': "Union", 'SourceRoiNames': [r"PTV Medium Dose"],
+                         'MarginSettings': {'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0,
+                                            'Posterior': 0, 'Right': 0, 'Left': 0}},
+            ExpressionB={'Operation': "Union", 'SourceRoiNames': [r"PTV Low Dose"],
+                         'MarginSettings': {'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0,
+                                            'Posterior': 0, 'Right': 0, 'Left': 0}}, ResultOperation="Subtraction",
+            ResultMarginSettings={'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0,
+                                  'Right': 0, 'Left': 0})
+        Case.PatientModel.RegionsOfInterest[r"zz_PTV Medium Dose"].UpdateDerivedGeometry(Examination=Examination,
+                                                                                         Algorithm="Auto")
+    except:
+        print("zz_PTV existent deja")
+
+    try:
+        r = ring_ORL_3PTV(r"Ring_High_Dose", r_PTV_HD, r"zz_PTV Low Dose", r"zz_PTV Medium Dose")
+        r = ring_ORL_3PTV(r"Ring_Medium_Dose", r_PTV_MD, r"zz_PTV Low Dose", r"Ring_High_Dose")
+        r = ring_ORL_3PTV(r"Ring_Low_Dose", r_PTV_LD, r"Ring_Medium_Dose", r"Ring_High_Dose")
+
+        #        Case.PatientModel.StructureSets[Examination].SimplifyContours(RoiNames=[r"Ring_High_Dose",r"Ring_Medium_Dose",r"Ring_Low_Dose"], RemoveHoles3D=False, RemoveSmallContours=True, AreaThreshold=0.1, ReduceMaxNumberOfPointsInContours=False, MaxNumberOfPoints=None, CreateCopyOfRoi=False, ResolveOverlappingContours=False)
+        Case.PatientModel.CreateRoi(Name=r"Protection", Color="Orange", Type="Undefined", TissueName=None,
+                                    RbeCellTypeName=None, RoiMaterial=None)
+        Case.PatientModel.RegionsOfInterest[r"Protection"].SetAlgebraExpression(
+            ExpressionA={'Operation': "Union", 'SourceRoiNames': [External],
+                         'MarginSettings': {'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0,
+                                            'Posterior': 0, 'Right': 0, 'Left': 0}},
+            ExpressionB={'Operation': "Union", 'SourceRoiNames': [r"PTV Low Dose"],
+                         'MarginSettings': {'Type': "Expand", 'Superior': 1.5, 'Inferior': 1.5, 'Anterior': 1.5,
+                                            'Posterior': 1.5, 'Right': 1.5, 'Left': 1.5}},
+            ResultOperation="Subtraction",
+            ResultMarginSettings={'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0,
+                                  'Right': 0, 'Left': 0})
+        Case.PatientModel.RegionsOfInterest[r"Protection"].UpdateDerivedGeometry(Examination=Examination,
+                                                                                 Algorithm="Auto")
+    except:
+        print("RING existent deja")
+
     try:
         Case.PatientModel.RegionsOfInterest[r_PTV_HD].DeleteRoi()
         Case.PatientModel.RegionsOfInterest[r_PTV_MD].DeleteRoi()
         Case.PatientModel.RegionsOfInterest[r_PTV_LD].DeleteRoi()
     except:
         print("delete")
-	
-		
-		
-if Nombre_de_PTV==2:
-    #########################
-    # Ring
-    #########################
-    rois_a_modifier=['Ring_High_Dose','Ring_Low_Dose']
-    for roi in rois_a_modifier:
-        try:
-            Case.PatientModel.RegionsOfInterest[roi].Name = roi+"_1"
-        except:
-            print("roi ", roi, " n'existe pas")
+
+################################################################################################
+################################################################################################
+#############  2 PTV ############################################################################
+################################################################################################
+################################################################################################
+
+if Nombre_de_PTV == 2:
     #########################
     # PTV dosi
     #########################
-    #Gap PTV LOw dose: 1.5cm; Md=1cm
-    Gap_LD=1.5
+    # Gap PTV LOw dose: 1.5cm; Md=1cm
+    Gap_LD = 1.5
 
     try:
-        nom="z_PTV Low Dose "+str(Gap_LD)+"cm"
-        color=Case.PatientModel.RegionsOfInterest["PTV Low Dose"].Color
-        Case.PatientModel.CreateRoi(Name=nom, Color=color, Type="Undefined", TissueName=None, RbeCellTypeName=None, RoiMaterial=None)
-        Case.PatientModel.RegionsOfInterest[nom].SetAlgebraExpression(ExpressionA={ 'Operation': "Union", 'SourceRoiNames': [r"PTV Low Dose"], 'MarginSettings': { 'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0, 'Right': 0, 'Left': 0 } }, ExpressionB={ 'Operation': "Union", 'SourceRoiNames': [r"PTV High Dose"], 'MarginSettings': { 'Type': "Expand", 'Superior': Gap_LD, 'Inferior': Gap_LD, 'Anterior': Gap_LD, 'Posterior': Gap_LD, 'Right': Gap_LD, 'Left': Gap_LD } }, ResultOperation="Subtraction", ResultMarginSettings={ 'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0, 'Right': 0, 'Left': 0 })
+        nom = "z_PTV Low Dose " + str(Gap_LD) + "cm"
+        color = Case.PatientModel.RegionsOfInterest["PTV Low Dose"].Color
+        Case.PatientModel.CreateRoi(Name=nom, Color=color, Type="Undefined", TissueName=None, RbeCellTypeName=None,
+                                    RoiMaterial=None)
+        Case.PatientModel.RegionsOfInterest[nom].SetAlgebraExpression(
+            ExpressionA={'Operation': "Union", 'SourceRoiNames': [r"PTV Low Dose"],
+                         'MarginSettings': {'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0,
+                                            'Posterior': 0, 'Right': 0, 'Left': 0}},
+            ExpressionB={'Operation': "Union", 'SourceRoiNames': [r"PTV High Dose"],
+                         'MarginSettings': {'Type': "Expand", 'Superior': Gap_LD, 'Inferior': Gap_LD,
+                                            'Anterior': Gap_LD, 'Posterior': Gap_LD, 'Right': Gap_LD, 'Left': Gap_LD}},
+            ResultOperation="Subtraction",
+            ResultMarginSettings={'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0,
+                                  'Right': 0, 'Left': 0})
         Case.PatientModel.RegionsOfInterest[nom].UpdateDerivedGeometry(Examination=Examination, Algorithm="Auto")
 
     except:
         print("PTV dosi existe deja")
-    Gap_LD=0.2
+    Gap_LD = 0.2
     try:
-        nom="z_PTV Low Dose"
-        color=Case.PatientModel.RegionsOfInterest[r"PTV Low Dose"].Color
-        Case.PatientModel.CreateRoi(Name=nom, Color=color, Type="Undefined", TissueName=None, RbeCellTypeName=None, RoiMaterial=None)
-        Case.PatientModel.RegionsOfInterest[nom].SetAlgebraExpression(ExpressionA={ 'Operation': "Union", 'SourceRoiNames': [r"PTV Low Dose"], 'MarginSettings': { 'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0, 'Right': 0, 'Left': 0 } }, ExpressionB={ 'Operation': "Union", 'SourceRoiNames': [r"PTV High Dose"], 'MarginSettings': { 'Type': "Expand", 'Superior': Gap_LD, 'Inferior': Gap_LD, 'Anterior': Gap_LD, 'Posterior': Gap_LD, 'Right': Gap_LD, 'Left': Gap_LD } }, ResultOperation="Subtraction", ResultMarginSettings={ 'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0, 'Right': 0, 'Left': 0 })
+        nom = "z_PTV Low Dose"
+        color = Case.PatientModel.RegionsOfInterest[r"PTV Low Dose"].Color
+        Case.PatientModel.CreateRoi(Name=nom, Color=color, Type="Undefined", TissueName=None, RbeCellTypeName=None,
+                                    RoiMaterial=None)
+        Case.PatientModel.RegionsOfInterest[nom].SetAlgebraExpression(
+            ExpressionA={'Operation': "Union", 'SourceRoiNames': [r"PTV Low Dose"],
+                         'MarginSettings': {'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0,
+                                            'Posterior': 0, 'Right': 0, 'Left': 0}},
+            ExpressionB={'Operation': "Union", 'SourceRoiNames': [r"PTV High Dose"],
+                         'MarginSettings': {'Type': "Expand", 'Superior': Gap_LD, 'Inferior': Gap_LD,
+                                            'Anterior': Gap_LD, 'Posterior': Gap_LD, 'Right': Gap_LD, 'Left': Gap_LD}},
+            ResultOperation="Subtraction",
+            ResultMarginSettings={'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0,
+                                  'Right': 0, 'Left': 0})
         Case.PatientModel.RegionsOfInterest[nom].UpdateDerivedGeometry(Examination=Examination, Algorithm="Auto")
     except:
         print("z_PTV dosi existent deja")
-		
-    Gap_LD=0
 
+    Gap_LD = 0
 
-    
     try:
-        nom="zz_PTV Low Dose"
-        color=Case.PatientModel.RegionsOfInterest[r"PTV Low Dose"].Color
-        Case.PatientModel.CreateRoi(Name=nom, Color=color, Type="Undefined", TissueName=None, RbeCellTypeName=None, RoiMaterial=None)
-        Case.PatientModel.RegionsOfInterest[nom].SetAlgebraExpression(ExpressionA={ 'Operation': "Union", 'SourceRoiNames': [r"PTV Low Dose"], 'MarginSettings': { 'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0, 'Right': 0, 'Left': 0 } }, ExpressionB={ 'Operation': "Union", 'SourceRoiNames': [r"PTV High Dose"], 'MarginSettings': { 'Type': "Expand", 'Superior': Gap_LD, 'Inferior': Gap_LD, 'Anterior': Gap_LD, 'Posterior': Gap_LD, 'Right': Gap_LD, 'Left': Gap_LD } }, ResultOperation="Subtraction", ResultMarginSettings={ 'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0, 'Right': 0, 'Left': 0 })
+        nom = "zz_PTV Low Dose"
+        color = Case.PatientModel.RegionsOfInterest[r"PTV Low Dose"].Color
+        Case.PatientModel.CreateRoi(Name=nom, Color=color, Type="Undefined", TissueName=None, RbeCellTypeName=None,
+                                    RoiMaterial=None)
+        Case.PatientModel.RegionsOfInterest[nom].SetAlgebraExpression(
+            ExpressionA={'Operation': "Union", 'SourceRoiNames': [r"PTV Low Dose"],
+                         'MarginSettings': {'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0,
+                                            'Posterior': 0, 'Right': 0, 'Left': 0}},
+            ExpressionB={'Operation': "Union", 'SourceRoiNames': [r"PTV High Dose"],
+                         'MarginSettings': {'Type': "Expand", 'Superior': Gap_LD, 'Inferior': Gap_LD,
+                                            'Anterior': Gap_LD, 'Posterior': Gap_LD, 'Right': Gap_LD, 'Left': Gap_LD}},
+            ResultOperation="Subtraction",
+            ResultMarginSettings={'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0,
+                                  'Right': 0, 'Left': 0})
         Case.PatientModel.RegionsOfInterest[nom].UpdateDerivedGeometry(Examination=Examination, Algorithm="Auto")
 
     except:
-        print("zz_PTV dosi existent deja")  
+        print("zz_PTV dosi existent deja")
 
-    #########################
+        #########################
     # Ring
     #########################
-    
-     #TEMP_RING:
+
+    # TEMP_RING:
     try:
-        Case.PatientModel.CreateRoi(Name=r"Ring_High_Dose", Color="Red", Type="Undefined", TissueName=None, RbeCellTypeName=None, RoiMaterial=None)
-        Case.PatientModel.CreateRoi(Name=r"Ring_Low_Dose", Color="Blue", Type="Undefined", TissueName=None, RbeCellTypeName=None, RoiMaterial=None)
-        r_PTV_HD=RING('PTV High Dose',1.5,0.3)
-        r_PTV_LD=RING('PTV Low Dose',1.5,0.3)
+        Case.PatientModel.CreateRoi(Name=r"Ring_High_Dose", Color="Red", Type="Undefined", TissueName=None,
+                                    RbeCellTypeName=None, RoiMaterial=None)
+        Case.PatientModel.CreateRoi(Name=r"Ring_Low_Dose", Color="Blue", Type="Undefined", TissueName=None,
+                                    RbeCellTypeName=None, RoiMaterial=None)
+        r_PTV_HD = RING('PTV High Dose', 1.5, 0.3)
+        r_PTV_LD = RING('PTV Low Dose', 1.5, 0.3)
     except:
-        print("temp ring deja existant")   
-    
+        print("temp ring deja existant")
+
     try:
-        Case.PatientModel.CreateRoi(Name=r"zz_PTV Low Dose", Color="Blue", Type="Undefined", TissueName=None, RbeCellTypeName=None, RoiMaterial=None)
-        Case.PatientModel.RegionsOfInterest[r"zz_PTV Low Dose"].SetAlgebraExpression(ExpressionA={ 'Operation': "Union", 'SourceRoiNames': [r"PTV Low Dose"], 'MarginSettings': { 'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0, 'Right': 0, 'Left': 0 } }, ExpressionB={ 'Operation': "Union", 'SourceRoiNames': [r"PTV High Dose"], 'MarginSettings': { 'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0, 'Right': 0, 'Left': 0 } }, ResultOperation="Subtraction", ResultMarginSettings={ 'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0, 'Right': 0, 'Left': 0 })
-        Case.PatientModel.RegionsOfInterest[r"zz_PTV Low Dose"].UpdateDerivedGeometry(Examination=Examination, Algorithm="Auto")
+        Case.PatientModel.CreateRoi(Name=r"zz_PTV Low Dose", Color="Blue", Type="Undefined", TissueName=None,
+                                    RbeCellTypeName=None, RoiMaterial=None)
+        Case.PatientModel.RegionsOfInterest[r"zz_PTV Low Dose"].SetAlgebraExpression(
+            ExpressionA={'Operation': "Union", 'SourceRoiNames': [r"PTV Low Dose"],
+                         'MarginSettings': {'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0,
+                                            'Posterior': 0, 'Right': 0, 'Left': 0}},
+            ExpressionB={'Operation': "Union", 'SourceRoiNames': [r"PTV High Dose"],
+                         'MarginSettings': {'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0,
+                                            'Posterior': 0, 'Right': 0, 'Left': 0}}, ResultOperation="Subtraction",
+            ResultMarginSettings={'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0,
+                                  'Right': 0, 'Left': 0})
+        Case.PatientModel.RegionsOfInterest[r"zz_PTV Low Dose"].UpdateDerivedGeometry(Examination=Examination,
+                                                                                      Algorithm="Auto")
 
     except:
         print("zz_PTV deja existant")
 
-
     try:
-        r=ring_ORL_2PTV(r"Ring_High_Dose",r_PTV_HD,r"zz_PTV Low Dose")
-        r=ring_ORL_2PTV(r"Ring_Low_Dose",r_PTV_LD,r"Ring_High_Dose")
-		
-#        Case.PatientModel.StructureSets[Examination].SimplifyContours(RoiNames=[r"Ring_High_Dose",r"Ring_Medium_Dose",r"Ring_Low_Dose"], RemoveHoles3D=False, RemoveSmallContours=True, AreaThreshold=0.1, ReduceMaxNumberOfPointsInContours=False, MaxNumberOfPoints=None, CreateCopyOfRoi=False, ResolveOverlappingContours=False)
+        r = ring_ORL_2PTV(r"Ring_High_Dose", r_PTV_HD, r"zz_PTV Low Dose")
+        r = ring_ORL_2PTV(r"Ring_Low_Dose", r_PTV_LD, r"Ring_High_Dose")
 
-        Case.PatientModel.CreateRoi(Name=r"Protection", Color="Orange", Type="Undefined", TissueName=None, RbeCellTypeName=None, RoiMaterial=None)
-        Case.PatientModel.RegionsOfInterest[r"Protection"].SetAlgebraExpression(ExpressionA={ 'Operation': "Union", 'SourceRoiNames': [External], 'MarginSettings': { 'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0, 'Right': 0, 'Left': 0 } }, ExpressionB={ 'Operation': "Union", 'SourceRoiNames': [r"PTV Low Dose"], 'MarginSettings': { 'Type': "Expand", 'Superior': 1.5, 'Inferior': 1.5, 'Anterior': 1.5, 'Posterior': 1.5, 'Right': 1.5, 'Left': 1.5 } }, ResultOperation="Subtraction", ResultMarginSettings={ 'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0, 'Right': 0, 'Left': 0 })
-        Case.PatientModel.RegionsOfInterest[r"Protection"].UpdateDerivedGeometry(Examination=Examination, Algorithm="Auto")
+        #        Case.PatientModel.StructureSets[Examination].SimplifyContours(RoiNames=[r"Ring_High_Dose",r"Ring_Medium_Dose",r"Ring_Low_Dose"], RemoveHoles3D=False, RemoveSmallContours=True, AreaThreshold=0.1, ReduceMaxNumberOfPointsInContours=False, MaxNumberOfPoints=None, CreateCopyOfRoi=False, ResolveOverlappingContours=False)
+
+        Case.PatientModel.CreateRoi(Name=r"Protection", Color="Orange", Type="Undefined", TissueName=None,
+                                    RbeCellTypeName=None, RoiMaterial=None)
+        Case.PatientModel.RegionsOfInterest[r"Protection"].SetAlgebraExpression(
+            ExpressionA={'Operation': "Union", 'SourceRoiNames': [External],
+                         'MarginSettings': {'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0,
+                                            'Posterior': 0, 'Right': 0, 'Left': 0}},
+            ExpressionB={'Operation': "Union", 'SourceRoiNames': [r"PTV Low Dose"],
+                         'MarginSettings': {'Type': "Expand", 'Superior': 1.5, 'Inferior': 1.5, 'Anterior': 1.5,
+                                            'Posterior': 1.5, 'Right': 1.5, 'Left': 1.5}},
+            ResultOperation="Subtraction",
+            ResultMarginSettings={'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0,
+                                  'Right': 0, 'Left': 0})
+        Case.PatientModel.RegionsOfInterest[r"Protection"].UpdateDerivedGeometry(Examination=Examination,
+                                                                                 Algorithm="Auto")
     except:
-        print("RINGs deja existant")       
-        
+        print("RINGs deja existant")
+
     try:
         Case.PatientModel.RegionsOfInterest[r_PTV_HD].DeleteRoi()
         Case.PatientModel.RegionsOfInterest[r_PTV_LD].DeleteRoi()
     except:
         print("delete des temp ring")
+################################################################################################
+################################################################################################
+#############  1 PTV ############################################################################
+################################################################################################
+################################################################################################
+if Nombre_de_PTV == 1:
+    print("coucou 1 PTV")
+
+    # try:
+    r = RING(r"PTV High Dose", 1.5, 0.3)
+    print("coucou 2")
+    Case.PatientModel.CreateRoi(Name=r"Protection", Color="Orange", Type="Undefined", TissueName=None,
+                                RbeCellTypeName=None, RoiMaterial=None)
+    Case.PatientModel.RegionsOfInterest[r"Protection"].SetAlgebraExpression(
+        ExpressionA={'Operation': "Union", 'SourceRoiNames': [External],
+                     'MarginSettings': {'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0,
+                                        'Right': 0, 'Left': 0}},
+        ExpressionB={'Operation': "Union", 'SourceRoiNames': [r"PTV High Dose"],
+                     'MarginSettings': {'Type': "Expand", 'Superior': 1.5, 'Inferior': 1.5, 'Anterior': 1.5,
+                                        'Posterior': 1.5, 'Right': 1.5, 'Left': 1.5}}, ResultOperation="Subtraction",
+        ResultMarginSettings={'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0, 'Right': 0,
+                              'Left': 0})
+    Case.PatientModel.RegionsOfInterest[r"Protection"].UpdateDerivedGeometry(Examination=Examination, Algorithm="Auto")
+    # except:
+    #    print("1 PTV ring deja existant")
+    Case.PatientModel.RegionsOfInterest[r"PTV High Dose"].Name = r"PTV"
+
+#########################
+# z_OAR
+#########################
 
 
-for roi in rois_a_modifier:
-	try:			
-		Case.PatientModel.RegionsOfInterest[roi+"_1"].CreateAlgebraGeometry(Examination=Examination, Algorithm="Auto", ExpressionA={ 'Operation': "Union", 'SourceRoiNames': [roi], 'MarginSettings': { 'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0, 'Right': 0, 'Left': 0 } }, ExpressionB={ 'Operation': "Union", 'SourceRoiNames': [], 'MarginSettings': { 'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0, 'Right': 0, 'Left': 0 } }, ResultOperation="None", ResultMarginSettings={ 'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0, 'Right': 0, 'Left': 0 })
-		Case.PatientModel.RegionsOfInterest[roi].DeleteRoi()
-		Case.PatientModel.RegionsOfInterest[roi+"_1"].Name=roi
-	except:
-		print("roi ", roi, " n'existe pas")
+##############
+# Creation des z_OAR
+#############
+if Nombre_de_PTV == 1:
+    PTV_inter = "PTV"
+else:
+    PTV_inter = "PTV Low Dose"
 
+dict_z_OAR_a_creer = {}
+for i, roi in enumerate(OARs):
+    Case.PatientModel.CreateRoi(Name=r"inters_OAR", Color="Black", Type="Organ", TissueName=None, RbeCellTypeName=None,
+                                RoiMaterial=None)
+    Case.PatientModel.RegionsOfInterest['inters_OAR'].SetAlgebraExpression(
+        ExpressionA={'Operation': "Union", 'SourceRoiNames': [roi],
+                     'MarginSettings': {'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0,
+                                        'Right': 0, 'Left': 0}},
+        ExpressionB={'Operation': "Union", 'SourceRoiNames': [PTV_inter],
+                     'MarginSettings': {'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0,
+                                        'Right': 0, 'Left': 0}}, ResultOperation="Intersection",
+        ResultMarginSettings={'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0, 'Right': 0,
+                              'Left': 0})
+    Case.PatientModel.RegionsOfInterest['inters_OAR'].UpdateDerivedGeometry(Examination=Examination, Algorithm="Auto")
+    if Case.PatientModel.StructureSets[Nom_CT_selectionne].RoiGeometries['inters_OAR'].HasContours() is True:
+        dict_z_OAR_a_creer[roi] = 0
+    else:
+        dict_z_OAR_a_creer[roi] = 1
+    Case.PatientModel.RegionsOfInterest['inters_OAR'].DeleteRoi()
 
+gap = 0.2
+
+for roi in dict_z_OAR_a_creer:
+    if dict_z_OAR_a_creer[roi] == 0:
+        print('z_roi a crer:', roi)
+        color = Case.PatientModel.RegionsOfInterest[roi].Color
+        nom = r"z_" + roi + '_' + PTV_inter + '_gap_' + str(gap)
+        Case.PatientModel.CreateRoi(Name=nom, Color=color, Type="undefined", TissueName=None, RbeCellTypeName=None,
+                                    RoiMaterial=None)
+        Case.PatientModel.RegionsOfInterest[nom].SetAlgebraExpression(
+            ExpressionA={'Operation': "Union", 'SourceRoiNames': [roi],
+                         'MarginSettings': {'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0,
+                                            'Posterior': 0, 'Right': 0, 'Left': 0}},
+            ExpressionB={'Operation': "Union", 'SourceRoiNames': [PTV_inter],
+                         'MarginSettings': {'Type': "Expand", 'Superior': gap, 'Inferior': gap, 'Anterior': gap,
+                                            'Posterior': gap, 'Right': gap, 'Left': gap}},
+            ResultOperation="Subtraction",
+            ResultMarginSettings={'Type': "Expand", 'Superior': 0, 'Inferior': 0, 'Anterior': 0, 'Posterior': 0,
+                                  'Right': 0, 'Left': 0})
+        Case.PatientModel.RegionsOfInterest[nom].UpdateDerivedGeometry(Examination=Examination, Algorithm="Auto")
