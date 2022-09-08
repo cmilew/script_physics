@@ -130,7 +130,7 @@ def return_rtstruct(path, patient_id, study_to_import):
         return [False, False]
 
 
-class main_window():
+class main_window:
 
     def annulation(self):
         """Si l'utilisateur clique sur "Annuler" dans la pop up -> quitte le script"""
@@ -347,6 +347,50 @@ class main_window():
                 sys.stdout = saveout
                 fsock.close()
             sys.exit()
+
+        ### TEST STUDY SHADOW ET STUDY INSTANCE UID #################################################################
+
+        is_study_shadow = False
+        is_study_instance_uid_corrupted = False
+
+        # Study shadow test
+        try:
+            study_shadow_test = Case.Examinations[exam].GetStoredDicomTagValueForVerification(Group=0x0008,
+                                                                                              Element=0x0050)
+            print(study_shadow_test)
+        except:
+            is_study_shadow = True
+
+        # Study instance UID verification
+        study_instance_uid = str(Case.Examinations[exam].GetStoredDicomTagValueForVerification(Group=0x0020,
+                                                                                               Element=0x000D))
+
+        # Gets groups separated by '.'
+        groups = study_instance_uid.split('.')
+        # if group starts with 0 and is not '.0.', study instance uid is corrupted
+        is_study_instance_uid_corrupted = any(group.startswith('0') and group != '0' for group in groups)
+
+        # Message to display in pop up
+        if is_study_shadow and is_study_instance_uid_corrupted:
+            message = 'Attention le CT "' + exam + '" est un study shadow ET son study Instance UID du CT est ' \
+                                                        'corrompu, contactez le physicien de garde (4905).'
+        elif is_study_shadow and is_study_instance_uid_corrupted == False:
+            message = 'Attention, le CT "' + exam + '" est un study shadow, contacter le physicien de garde (4905)'
+        elif is_study_shadow == False and is_study_instance_uid_corrupted:
+            message = 'Attention le Study Instance UID du CT "' + exam + '" est corrompu, contactez le physicien ' \
+                                                                              'de garde (4905).'
+        if is_study_shadow or is_study_instance_uid_corrupted:
+            print(message)
+            root_pop_up = Toplevel(self.top)
+            Label(root_pop_up, text=message, foreground='red', font='Calibri 12 bold').grid(row=1, column=1, padx=5,
+                                                                                            pady=5)
+            Button(root_pop_up, text='OK', command=sys.exit, width=10).grid(row=2, column=1, padx=5, pady=5)
+            root_pop_up.bind('<Return>', lambda event: sys.exit())
+            root_pop_up.bind('<Escape>', lambda event: sys.exit())
+            root_pop_up.protocol("WM_DELETE_WINDOW", sys.exit)
+            self.top.mainloop()
+
+        ###################################################################################################################
 
         # Avant d'importer on récupère la liste des ROIs présentent initialement dans le case (dans le cas d'une replanif
         # par exemple)
@@ -1049,6 +1093,7 @@ class main_window():
 
         self.top.resizable(0, 0)
 
+
         if DEBUG:
             tkinter.messagebox.showinfo("Information - DEBUG",
                                         "Mode débuggage, les RTStructs Annotate ne seront pas supprimés du répertoire d'importation de Raystation")
@@ -1214,4 +1259,5 @@ class main_window():
         self.top.mainloop()
 
 main_window()
+
 
