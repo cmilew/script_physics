@@ -149,7 +149,8 @@ def fenetre_creation_ring():
     e3.grid(row=3, column=1)
     Button(master2, text='Arrêter le script', command=stop).grid(row=11, column=0, sticky=W, pady=4)
     Button(master2, text='Continuer', command=lambda:[show_entry_fields(),master2.destroy()]).grid(row=11, column=2, sticky=W, pady=4)
-    mainloop( )
+    mainloop()
+    checks_quit_script()
 
     
     return result
