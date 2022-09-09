@@ -231,26 +231,8 @@ e4.grid(row=4, column=1)
 Button(master2, text='Arrêter le script', command=stop).grid(row=11, column=0, sticky=W, pady=4)
 Button(master2, text='Continuer', command=lambda:[show_entry_fields(),master2.destroy()]).grid(row=11, column=2, sticky=W, pady=4)
 mainloop( )
-
+checks_quit_script()
 #SI un seul PTV --> on ne change pas les noms pour que les template d'obj fonctionnent --> PTV-PRV ....
 #Si plusieurs PTV, on utilise le nom du PTV
 
-
-
-
-
-
-
 r=creation_structures_stereo(PTV,gap,rep,PRVs,GTV,Nom_CT_selectionne)
-
-
-
-
-
-
-
-
-
-
-
-
