@@ -2,22 +2,6 @@ from connect import *
 from tkinter import *
 import sys
 
-# faire une pop up avec choix CT et ROI
-
-# ct = get_current('Examination')
-# selected_ct = ct.Name
-# rois_geom = case.PatientModel.StructureSets[selected_ct].RoiGeometries
-# heart_contours = rois_geom['Heart'].PrimaryShape.Contours
-
-# cut_heart_contours = []
-# 
-# for i in range(0, len(heart_contours) - 1, 4):
-#     print(i)
-#     cut_heart_contours.append(heart_contours[i])
-# 
-# case.PatientModel.StructureSets[selected_ct].RoiGeometries['Heart'].PrimaryShape.Contours = cut_heart_contours
-
-
 def checks_quit_script():
     """ Function aiming to close any pop-up when the red-cross is clicked """
     global quit_script
@@ -35,9 +19,11 @@ def delete_slices(master, rois_list_names, rois_dict, rois_geom):
             print(f'Cutting slice of ROI {roi_name}')
             cut_roi_contours = []
             roi_contours = rois_geom[roi_name].PrimaryShape.Contours
-            # Cutting 3 slices every 4 slice
-            for index in range(0, len(roi_contours) - 1, 4):
+            # Cutting 3 slices every 4 slice except last slice (to avoid duplicates)
+            for index in range(0, len(roi_contours) - 2, 4):
                 cut_roi_contours.append(roi_contours[index])
+            # Adds last slice of the ROI to be cut (should always be kept)
+            cut_roi_contours.append(roi_contours[len(roi_contours)-1])
             rois_geom[roi_name].PrimaryShape.Contours = cut_roi_contours
     quit_script = False
     master.destroy()
