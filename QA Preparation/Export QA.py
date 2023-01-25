@@ -130,7 +130,7 @@ for i_QAplan in range(number_of_qaplans):
 			repertoire=r'\\nas-01\PHY_PROC\Radiotherapie\CQ IMRT-IMAT-STEREO\NOVALIS\ARCCHECK\Patient Plans_VMAT'
 		else:
 			#repertoire=r'\\nas-01\PHY_PROC\Radiotherapie\CQ IMRT-IMAT-STEREO\VERSAHD\Patient Plans'
-			repertoire=r'\\nas-01\Controle_Qualite_Patient\VERSAHD\Patient Plans'
+			repertoire=r'\\nas-01\Controle_Qualite_Patient\VERSAHD\ArcCheck\Patient Plans'
 		repertoire2=os.path.join(repertoire, Name_dossier)
 		print(repertoire2)
 
